@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class HomeHeader extends StatelessWidget {
@@ -60,12 +61,13 @@ class HomeHeader extends StatelessWidget {
                 color: const Color(0xFFE5DDFB),
               ),
             ),
-            child: const Text(
-              'Y',
-              style: TextStyle(
-                fontSize: 11,
+            child: IconButton(
+              onPressed: () => FirebaseAuth.instance.signOut(),
+              icon: const Icon(
+                Icons.logout,
                 color: Color(0xFF6847E8),
               ),
+              tooltip: 'Logout',
             ),
           ),
         ],

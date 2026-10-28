@@ -9,6 +9,7 @@ class DocumentCard extends StatelessWidget {
   final String pages;
   final String sizeAndDate;
   final String? localPath;
+  final String documentId;
 
 
   const DocumentCard({
@@ -20,6 +21,7 @@ class DocumentCard extends StatelessWidget {
     required this.pages,
     required this.sizeAndDate,
     this.localPath,
+    required this.documentId,
   });
 
   @override
@@ -30,6 +32,7 @@ class DocumentCard extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (context) => ChatScreen(
+              documentId: documentId,
               documentTitle: title,
               localPath: localPath,
             ),

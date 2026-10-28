@@ -17,6 +17,20 @@ class DocumentsContent extends StatefulWidget {
 }
 
 class _DocumentsContentState extends State<DocumentsContent> {
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+  getRecentDocuments() async {
+    final user = FirebaseAuth.instance.currentUser!;
+
+    final result = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('documents')
+        .orderBy('createdAt', descending: true)
+        .limit(3)
+        .get();
+
+    return result.docs;
+  }
   final LocalPdfStorageService localPdfStorageService =
   LocalPdfStorageService();
   final PdfPickerService pdfPickerService = PdfPickerService();
@@ -94,7 +108,23 @@ class _DocumentsContentState extends State<DocumentsContent> {
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year}';
   }
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> recentDocuments = [];
 
+  @override
+  void initState() {
+    super.initState();
+    loadRecentDocuments();
+  }
+
+  Future<void> loadRecentDocuments() async {
+    final documents = await getRecentDocuments();
+
+    if (mounted) {
+      setState(() {
+        recentDocuments = documents;
+      });
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -244,6 +274,7 @@ class _DocumentsContentState extends State<DocumentsContent> {
                         child: DocumentCard(
                           title: data['fileName'] ?? 'Untitled PDF',
                           localPath: data['localPath'] as String?,
+                          documentId: document.id,
                           category: 'PDF',
                           categoryColor: const Color(0xFFEDE9FF),
                           categoryTextColor: const Color(0xFF6244D8),
@@ -276,20 +307,24 @@ class _DocumentsContentState extends State<DocumentsContent> {
             ),
           ),
           const SizedBox(height: 12),
-          const RecentChatCard(
-            title: 'Runway & growth metrics deep-dive',
-            subtitle: 'Nexora Labs — Series B Pitch Deck',
-          ),
-          const SizedBox(height: 10),
-          const RecentChatCard(
-            title: 'Gross margin change over year',
-            subtitle: 'Q3 2026 Financial Report',
-          ),
-          const SizedBox(height: 10),
-          const RecentChatCard(
-            title: 'Termination & liability clauses',
-            subtitle: 'Master Services Agreement — Atlas Health',
-          ),
+
+          if (recentDocuments.isEmpty)
+            const Text('No conversations yet.')
+          else
+            ...recentDocuments.map((document) {
+              final data = document.data();
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: RecentChatCard(
+                  title: data['fileName'] ?? 'Untitled PDF',
+                  subtitle: 'Continue chatting with this PDF',
+                  documentId: document.id,
+                  localPath: data['localPath'] as String?,
+                ),
+              );
+            }),
+
           const SizedBox(height: 18),
           const Center(
             child: Text(

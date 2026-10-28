@@ -1,4 +1,6 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/pdf_text_service.dart';
@@ -8,11 +10,13 @@ import 'widgets/chat_composer.dart';
 import 'widgets/user_message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
+  final String documentId;
   final String documentTitle;
   final String? localPath;
 
   const ChatScreen({
     super.key,
+    required this.documentId,
     required this.documentTitle,
     this.localPath,
   });
@@ -33,13 +37,124 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String _pdfText = '';
   bool _isLoadingPdf = true;
+  bool _isLoadingHistory = true;
   bool _isSending = false;
   String? _pdfError;
+
+  CollectionReference<Map<String, dynamic>>? get _messagesCollection {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return null;
+
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('documents')
+        .doc(widget.documentId)
+        .collection('messages');
+  }
 
   @override
   void initState() {
     super.initState();
     _loadPdfText();
+    _loadMessages();
+  }
+
+  // Restore the conversation for this PDF.
+  Future<void> _loadMessages() async {
+    try {
+      final collection = _messagesCollection;
+
+      if (collection == null) return;
+
+      final snapshot = await collection
+          .orderBy('createdAt')
+          .get();
+
+      final loadedMessages = snapshot.docs.map((doc) {
+        final data = doc.data();
+
+        final rawSources = data['sources'];
+        final sources = rawSources is List
+            ? rawSources
+            .whereType<Map>()
+            .map(
+              (source) => Map<String, dynamic>.from(source),
+        )
+            .toList()
+            : <Map<String, dynamic>>[];
+
+        return <String, dynamic>{
+          'type': data['type'] as String? ?? 'assistant',
+          'message': data['message'] as String? ?? '',
+          'time': data['time'] as String? ?? '',
+          'sources': sources,
+          'isError': data['isError'] == true,
+        };
+      }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        messages
+          ..clear()
+          ..addAll(loadedMessages);
+      });
+
+      _scrollToBottom();
+    } catch (error) {
+      debugPrint('Failed to load chat history: $error');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not load previous messages. Please try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingHistory = false);
+      }
+    }
+  }
+
+  // Save one message to this PDF's Firestore subcollection.
+  Future<void> _saveMessage(
+      Map<String, dynamic> message,
+      ) async {
+    try {
+      final collection = _messagesCollection;
+
+      if (collection == null) {
+        debugPrint('Message not saved: no signed-in user.');
+        return;
+      }
+
+      await collection.add({
+        'type': message['type'],
+        'message': message['message'],
+        'time': message['time'],
+        'sources': message['sources'] ?? [],
+        'isError': message['isError'] == true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      debugPrint('Failed to save chat message: $error');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Message could not be saved to chat history.',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadPdfText() async {
@@ -50,7 +165,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
       setState(() {
         _isLoadingPdf = false;
-        _pdfError = 'This document has no local PDF file available.';
+        _pdfError =
+        'This document has no local PDF file available.';
       });
       return;
     }
@@ -77,7 +193,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
       setState(() {
         _isLoadingPdf = false;
-        _pdfError = 'Unable to read this PDF. Please reopen the document.';
+        _pdfError =
+        'Unable to read this PDF. Please reopen the document.';
       });
 
       debugPrint('PDF extraction failed: $error');
@@ -87,7 +204,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMessage() async {
     final question = _messageController.text.trim();
 
-    if (question.isEmpty || _isSending || _isLoadingPdf) {
+    if (question.isEmpty ||
+        _isSending ||
+        _isLoadingPdf ||
+        _isLoadingHistory) {
       return;
     }
 
@@ -102,18 +222,22 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    setState(() {
-      messages.add({
-        'type': 'user',
-        'message': question,
-        'time': _currentTime(),
-      });
+    final userMessage = <String, dynamic>{
+      'type': 'user',
+      'message': question,
+      'time': _currentTime(),
+    };
 
+    setState(() {
+      messages.add(userMessage);
       _messageController.clear();
       _isSending = true;
     });
 
     _scrollToBottom();
+
+    // Save the question before requesting the AI response.
+    await _saveMessage(userMessage);
 
     try {
       final answer = await _chatService.askQuestion(
@@ -123,29 +247,37 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (!mounted) return;
 
+      final assistantMessage = <String, dynamic>{
+        'type': 'assistant',
+        'message': answer,
+        'time': _currentTime(),
+        'sources': <Map<String, dynamic>>[],
+      };
+
       setState(() {
-        messages.add({
-          'type': 'assistant',
-          'message': answer,
-          'time': _currentTime(),
-          'sources': <Map<String, dynamic>>[],
-        });
+        messages.add(assistantMessage);
       });
+
+      await _saveMessage(assistantMessage);
     } catch (error) {
       if (!mounted) return;
 
+      final errorMessage = <String, dynamic>{
+        'type': 'assistant',
+        'message':
+        'Sorry, I couldn’t generate an answer. '
+            'Please check your connection and try again.\n\n'
+            'Details: ${_friendlyError(error)}',
+        'time': _currentTime(),
+        'sources': <Map<String, dynamic>>[],
+        'isError': true,
+      };
+
       setState(() {
-        messages.add({
-          'type': 'assistant',
-          'message':
-          'Sorry, I couldn’t generate an answer. '
-              'Please check your connection and try again.\n\n'
-              'Details: ${_friendlyError(error)}',
-          'time': _currentTime(),
-          'sources': <Map<String, dynamic>>[],
-          'isError': true,
-        });
+        messages.add(errorMessage);
       });
+
+      await _saveMessage(errorMessage);
     } finally {
       if (mounted) {
         setState(() => _isSending = false);
@@ -237,22 +369,32 @@ class _ChatScreenState extends State<ChatScreen> {
         top: false,
         child: Column(
           children: [
-            if (_isLoadingPdf)
+            if (_isLoadingPdf || _isLoadingHistory)
               const LinearProgressIndicator(
                 minHeight: 2,
                 color: Color(0xFF6C63FF),
               ),
             Expanded(
-              child: messages.isEmpty
+              child: _isLoadingHistory && messages.isEmpty
+                  ? const Center(
+                child: CircularProgressIndicator(),
+              )
+                  : messages.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-                itemCount: messages.length + (_isSending ? 1 : 0),
+                padding: const EdgeInsets.fromLTRB(
+                  20, 22, 20, 18,
+                ),
+                itemCount:
+                messages.length + (_isSending ? 1 : 0),
                 itemBuilder: (context, index) {
-                  if (_isSending && index == messages.length) {
+                  if (_isSending &&
+                      index == messages.length) {
                     return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
+                      padding: EdgeInsets.symmetric(
+                        vertical: 16,
+                      ),
                       child: Row(
                         children: [
                           SizedBox(
@@ -303,7 +445,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildEmptyState() {
-    final isReady = !_isLoadingPdf && _pdfText.trim().isNotEmpty;
+    final isReady =
+        !_isLoadingPdf && _pdfText.trim().isNotEmpty;
 
     return Center(
       child: Padding(

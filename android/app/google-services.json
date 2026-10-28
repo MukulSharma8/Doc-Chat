@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "732237711815",
+    "project_id": "docchat-65be3",
+    "storage_bucket": "docchat-65be3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:732237711815:android:59fa5eca5c0234730971e2",
+        "android_client_info": {
+          "package_name": "com.example.docchat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNm3CcsKyDMeqI656LdX-4Kp6x-PC_Vb8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
