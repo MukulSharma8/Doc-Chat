@@ -264,7 +264,7 @@ class _DocumentsContentState extends State<DocumentsContent> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    ...documents.map((document) {
+                    ...documents.take(3).map((document) {
                       final data = document.data();
                       final fileName =
                           data['fileName'] as String? ?? 'Untitled PDF';
@@ -311,7 +311,7 @@ class _DocumentsContentState extends State<DocumentsContent> {
           if (recentDocuments.isEmpty)
             const Text('No conversations yet.')
           else
-            ...recentDocuments.map((document) {
+            ...recentDocuments.take(3).map((document) {
               final data = document.data();
 
               return Padding(

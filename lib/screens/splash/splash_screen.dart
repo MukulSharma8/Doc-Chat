@@ -1,28 +1,47 @@
-
 import 'package:docchat/screens/auth/auth_screen.dart';
 import 'package:docchat/screens/home/home_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  bool _isLoading = true;
+  User? _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    final user = await FirebaseAuth.instance.authStateChanges().first;
+
+    if (!mounted) return;
+
+    setState(() {
+      _user = user;
+      _isLoading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildSplash();
-        }
+    if (_isLoading) {
+      return _buildSplash();
+    }
 
-        if (snapshot.hasData) {
-          return const HomeScreen();
-        }
+    if (_user != null) {
+      return const HomeScreen();
+    }
 
-        return const AuthScreen();
-      },
-    );
+    return const AuthScreen();
   }
 
   Widget _buildSplash() {
@@ -76,7 +95,7 @@ class SplashScreen extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: 24),
               child: Text(
                 'Turn any PDF into a conversation. Ask,\n'
-                    'understand, cite.',
+                'understand, cite.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF4D4D57),

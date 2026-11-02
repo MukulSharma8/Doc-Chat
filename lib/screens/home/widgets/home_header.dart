@@ -1,3 +1,4 @@
+import 'package:docchat/screens/auth/auth_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -16,10 +17,10 @@ class HomeHeader extends StatelessWidget {
               color: const Color(0xFF191B27),
               borderRadius: BorderRadius.circular(13),
             ),
-            child: const Icon(
-              Icons.picture_as_pdf_outlined,
-              color: Colors.white,
-              size: 20,
+            child: Image.asset(
+              'assets/images/logo.png',
+              height: 20,
+              width: 20,
             ),
           ),
 
@@ -51,8 +52,8 @@ class HomeHeader extends StatelessWidget {
           const Spacer(),
 
           Container(
-            width: 32,
-            height: 32,
+            width: 40,
+            height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: const Color(0xFFF5F1FF),
@@ -62,8 +63,12 @@ class HomeHeader extends StatelessWidget {
               ),
             ),
             child: IconButton(
-              onPressed: () => FirebaseAuth.instance.signOut(),
+              onPressed: () {
+                FirebaseAuth.instance.signOut();
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context)=> AuthScreen()));
+                },
               icon: const Icon(
+                size: 22,
                 Icons.logout,
                 color: Color(0xFF6847E8),
               ),

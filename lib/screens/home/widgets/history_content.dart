@@ -1,7 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../chat/chat_screen.dart';
 
-class HistoryContent extends StatelessWidget {
+class HistoryContent extends StatefulWidget {
   const HistoryContent({super.key});
+
+  @override
+  State<HistoryContent> createState() => _HistoryContentState();
+}
+
+class _HistoryContentState extends State<HistoryContent> {
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> documents = [];
+  bool isLoading = true;
+
+  String _formatDate(dynamic timestamp) {
+    if (timestamp is! Timestamp) return '';
+
+    final date = timestamp.toDate();
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    loadHistory();
+  }
+
+  Future<void> loadHistory() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return;
+
+    final result = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('documents')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    if (mounted) {
+      setState(() {
+        documents = result.docs;
+        isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,49 +118,46 @@ class HistoryContent extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 30),
-
-          const _HistorySection(
-            title: 'TODAY',
-            items: [
-              _HistoryItem(
-                title: 'Runway & growth metrics deep-dive',
-                document: 'Nexora Labs — Series B Pitch Deck',
-                time: 'Today, 11:02',
-                message:
-                'DocChat: The deck targets a \$25M Series B, which extends runway to 28...',
-              ),
-              _HistoryItem(
-                title: 'Gross margin change over year',
-                document: 'Q3 2026 Financial Report',
-                time: 'Today, 08:27',
-                message:
-                'DocChat: Gross margin improved from 71.4% in Q3 2025 to 76.8% in Q3 2026 ...',
-              ),
-            ],
-          ),
-
           const SizedBox(height: 28),
 
-          const _HistorySection(
-            title: 'YESTERDAY',
-            items: [
-              _HistoryItem(
-                title: 'Termination & liability clauses',
-                document: 'Master Services Agreement — Atlas Health',
-                time: 'Yesterday, 19:44',
-                message:
-                'DocChat: Yes — aggregate liability is capped at the fees paid in the 12...',
-              ),
-              _HistoryItem(
-                title: 'How multi-head attention works',
-                document: 'Attention Is All You Need (Vaswani et al., 2017)',
-                time: 'Yesterday, 14:05',
-                message:
-                'DocChat: Multi-head attention allows the model to focus on different...',
-              ),
-            ],
-          ),
+          if (isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (documents.isEmpty)
+            const Text(
+              'No chat history yet.',
+              style: TextStyle(color: Color(0xFF686974)),
+            )
+          else
+            ...documents.map((document) {
+              final data = document.data();
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(17),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(
+                          documentId: document.id,
+                          documentTitle: data['fileName'] ?? 'Untitled PDF',
+                          localPath: data['localPath'] as String?,
+                        ),
+                      ),
+                    );
+                  },
+                  child: _HistoryCard(
+                    item: _HistoryItem(
+                      title: data['fileName'] ?? 'Untitled PDF',
+                      document: 'PDF document',
+                      time: _formatDate(data['createdAt']),
+                      message: 'Tap to continue this conversation',
+                    ),
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );
